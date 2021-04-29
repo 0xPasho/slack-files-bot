@@ -1,13 +1,12 @@
-// const { App } = require("@slack/bolt");
 const { createServer } = require("http");
 const express = require("express");
 const bodyParser = require("body-parser");
 const { WebClient } = require("@slack/web-api");
 const { createEventAdapter } = require("@slack/events-api");
+require("dotenv").config();
 
-// An access token (from your Slack app or custom integration - xoxp, xoxb)
-const signingSecret = "a73dc099a1951d345647165b635af776";
-const token = "xoxb-2004757421590-2011577199250-aupPrfygVF0VOag3OaWEcvh2";
+const signingSecret = process.env.SLACK_SIGNING_SECRET;
+const token = process.env.SLACK_BOT_TOKEN;
 
 // Initialize
 const slackEvents = createEventAdapter(signingSecret);
@@ -19,7 +18,7 @@ const app = express();
 const conversationId = "#general";
 const validQueryTypes = ["daily", "retro", "points", "planning"];
 const validMutationTypes = ["set"];
-const idChannel = '<@U020BGZ5V7C>';
+const idChannel = "<@U020BGZ5V7C>";
 
 const queryMessageStructure = {
   BOT_NAME: 0,
@@ -30,7 +29,7 @@ const mutationMessageStructure = {
   BOT_NAME: 0,
   ACTION_TYPE: 1,
   FILE_TYPE: 2,
-  URL: 3
+  URL: 3,
 };
 
 app.use("/slack/events", slackEvents.expressMiddleware());
@@ -62,43 +61,47 @@ slackEvents.on("app_mention", (event) => {
 // Response to Data
 function handleBotMention(message) {
   const { isValid, typeOfMessage, typeOfFile } = validateMessage(message);
-  if(isValid) {
-    
-    sendMessage(conversationId, `Message sent, trying to do a ${typeOfMessage}, to file ${typeOfFile} `);
-  }
-  else if(message.includes(" help")) {
+  if (isValid) {
+    sendMessage(
+      conversationId,
+      `Message sent, trying to do a ${typeOfMessage}, to file ${typeOfFile} `
+    );
+  } else if (message.includes(" help")) {
     runHelp();
-  }
-  else {
+  } else {
     // We have to create another function to say that message is incorrect
     runHelp();
   }
 }
 
-
 /**
- * Basically how it works is: we split the spaces in the string, then 
+ * Basically how it works is: we split the spaces in the string, then
  * based on the array positions we expect certain type of files or actions.
- * @param {string} message 
+ * @param {string} message
  * @returns {object}
  */
 function validateMessage(message) {
   let isValid = false;
-  let messagePieces = message.split(' ');
+  let messagePieces = message.split(" ");
   let typeOfMessage = "none";
   let typeOfFile = "not_defined";
 
-  const resultValidationQueryFile = isFileTypeValid(messagePieces[queryMessageStructure.FILE_TYPE] || '')
-  const resultValidationAction = isActionTypeValid(messagePieces[mutationMessageStructure.ACTION_TYPE] || '');
-  const resultValidationMutationFile = isFileTypeValid(messagePieces[mutationMessageStructure.FILE_TYPE] || '');
+  const resultValidationQueryFile = isFileTypeValid(
+    messagePieces[queryMessageStructure.FILE_TYPE] || ""
+  );
+  const resultValidationAction = isActionTypeValid(
+    messagePieces[mutationMessageStructure.ACTION_TYPE] || ""
+  );
+  const resultValidationMutationFile = isFileTypeValid(
+    messagePieces[mutationMessageStructure.FILE_TYPE] || ""
+  );
 
-  if(resultValidationQueryFile.isValid) {
+  if (resultValidationQueryFile.isValid) {
     isValid = true;
     typeOfMessage = "query";
     typeOfFile = resultValidationQueryFile.type;
-  }
-  else if(
-    resultValidationAction.isValid && 
+  } else if (
+    resultValidationAction.isValid &&
     resultValidationMutationFile.isValid &&
     messagePieces[mutationMessageStructure.URL]
   ) {
@@ -106,16 +109,15 @@ function validateMessage(message) {
     typeOfMessage = "mutation";
     typeOfFile = resultValidationMutationFile.type;
   }
-  return {isValid, typeOfMessage, typeOfFile };
+  return { isValid, typeOfMessage, typeOfFile };
 }
-
 
 function isFileTypeValid(message) {
   var isValid = false;
   var fileType = null;
   for (const type of validQueryTypes) {
-     console.log({type, message})
-  
+    console.log({ type, message });
+
     if (message.includes(type)) {
       isValid = true;
       fileType = type;
