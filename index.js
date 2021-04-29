@@ -3,6 +3,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const { WebClient } = require("@slack/web-api");
 const { createEventAdapter } = require("@slack/events-api");
+const db = require("./db.js");
 require("dotenv").config();
 
 const signingSecret = process.env.SLACK_SIGNING_SECRET;
@@ -18,7 +19,6 @@ const app = express();
 const conversationId = "#general";
 const validQueryTypes = ["daily", "retro", "points", "planning"];
 const validMutationTypes = ["set"];
-const idChannel = "<@U020BGZ5V7C>";
 
 const queryMessageStructure = {
   BOT_NAME: 0,
@@ -59,18 +59,49 @@ slackEvents.on("app_mention", (event) => {
 });
 
 // Response to Data
-function handleBotMention(message) {
-  const { isValid, typeOfMessage, typeOfFile } = validateMessage(message);
+async function handleBotMention(message) {
+  const { isValid, typeOfMessage, typeOfFile, fileToSet } = validateMessage(
+    message
+  );
   if (isValid) {
-    sendMessage(
-      conversationId,
-      `Message sent, trying to do a ${typeOfMessage}, to file ${typeOfFile} `
-    );
+    console.log("TYPE OF MESSAGE", typeOfMessage);
+    if (typeOfMessage === "query") {
+      try {
+        const file = await db.getFile(conversationId, typeOfFile);
+        if (file) {
+          sendMessage(conversationId, file);
+        } else {
+          sendMessage(
+            conversationId,
+            `Oops! No file has been set for ${typeOfFile} yet. Add one by running \`set ${typeOfFile} $url\``
+          );
+        }
+      } catch {
+        sendMessage(
+          conversationId,
+          `Oops! Something happened and the file couldn't be retrieved :( Try again!`
+        );
+      }
+    } else {
+      try {
+        await db.saveFile(conversationId, typeOfFile, fileToSet);
+        sendMessage(conversationId, "File saved successfully!");
+      } catch (e) {
+        console.log("ERROR", e);
+        sendMessage(
+          conversationId,
+          `Oh no! Something happened and the file couldn't be saved :( Try again!`
+        );
+      }
+    }
   } else if (message.includes(" help")) {
     runHelp();
   } else {
     // We have to create another function to say that message is incorrect
-    runHelp();
+    sendMessage(
+      conversationId,
+      `Oops! That's not a valid command. Run \`help\` to see available commands.`
+    );
   }
 }
 
@@ -85,6 +116,7 @@ function validateMessage(message) {
   let messagePieces = message.split(" ");
   let typeOfMessage = "none";
   let typeOfFile = "not_defined";
+  let fileToSet = null;
 
   const resultValidationQueryFile = isFileTypeValid(
     messagePieces[queryMessageStructure.FILE_TYPE] || ""
@@ -96,28 +128,25 @@ function validateMessage(message) {
     messagePieces[mutationMessageStructure.FILE_TYPE] || ""
   );
 
-  if (resultValidationQueryFile.isValid) {
+  if (resultValidationAction.isValid && resultValidationMutationFile.isValid) {
+    if (messagePieces[mutationMessageStructure.URL]) {
+      isValid = true;
+      typeOfMessage = "mutation";
+      typeOfFile = resultValidationMutationFile.type;
+      fileToSet = messagePieces[mutationMessageStructure.URL];
+    }
+  } else if (resultValidationQueryFile.isValid) {
     isValid = true;
     typeOfMessage = "query";
     typeOfFile = resultValidationQueryFile.type;
-  } else if (
-    resultValidationAction.isValid &&
-    resultValidationMutationFile.isValid &&
-    messagePieces[mutationMessageStructure.URL]
-  ) {
-    isValid = true;
-    typeOfMessage = "mutation";
-    typeOfFile = resultValidationMutationFile.type;
   }
-  return { isValid, typeOfMessage, typeOfFile };
+  return { isValid, typeOfMessage, typeOfFile, fileToSet };
 }
 
 function isFileTypeValid(message) {
   var isValid = false;
   var fileType = null;
   for (const type of validQueryTypes) {
-    console.log({ type, message });
-
     if (message.includes(type)) {
       isValid = true;
       fileType = type;
