@@ -17,8 +17,21 @@ const app = express();
 
 // This argument can be a channel ID, a DM ID, a MPDM ID, or a group ID
 const conversationId = "#general";
-const valid_types = ["daily", "retro", "points", "planning"];
+const validQueryTypes = ["daily", "retro", "points", "planning"];
+const validMutationTypes = ["set"];
 const idChannel = '<@U020BGZ5V7C>';
+
+const queryMessageStructure = {
+  BOT_NAME: 0,
+  FILE_TYPE: 1,
+};
+
+const mutationMessageStructure = {
+  BOT_NAME: 0,
+  ACTION_TYPE: 1,
+  FILE_TYPE: 2,
+  URL: 3
+};
 
 app.use("/slack/events", slackEvents.expressMiddleware());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -43,47 +56,84 @@ server.listen(port, () => {
 })();
 
 slackEvents.on("app_mention", (event) => {
-  handleEvent(event.text);
+  handleBotMention(event.text);
 });
 
-// Respons to Data
-function handleEvent(message) {
-  let processedMessage = clearMessage(idChannel, message);
-  if (message.includes(" set")) {
-    processedMessage = clearMessage(" set", processedMessage);
-    const { isValid, type } = isTypeValid(message);
-    if (isValid) {
-      processedMessage = clearMessage(" set", type);
-      //setNewFileUrl(type, url, conversationId);
-    }
-  } else {
-    if (message.includes(" help")) {
-      runHelp();
-    } else {
-      const { isValid, type } = isTypeValid(message);
-      if (isValid) {
-        // sendMessage(conversationId, getMessage(conversationId, type))
-      } else {
-        // handle error
-      }
-    }
+// Response to Data
+function handleBotMention(message) {
+  const { isValid, typeOfMessage, typeOfFile } = validateMessage(message);
+  if(isValid) {
+    
+    sendMessage(conversationId, `Message sent, trying to do a ${typeOfMessage}, to file ${typeOfFile} `);
+  }
+  else if(message.includes(" help")) {
+    runHelp();
+  }
+  else {
+    // We have to create another function to say that message is incorrect
+    runHelp();
   }
 }
 
-function clearMessage(textToPurge, message) {
-  return message.replace(textToPurge, '');
-} 
 
-function isTypeValid(message) {
-  var valid = false;
-  var type = null;
-  for (const type in valid_types) {
+/**
+ * Basically how it works is: we split the spaces in the string, then 
+ * based on the array positions we expect certain type of files or actions.
+ * @param {string} message 
+ * @returns {object}
+ */
+function validateMessage(message) {
+  let isValid = false;
+  let messagePieces = message.split(' ');
+  let typeOfMessage = "none";
+  let typeOfFile = "not_defined";
+
+  const resultValidationQueryFile = isFileTypeValid(messagePieces[queryMessageStructure.FILE_TYPE] || '')
+  const resultValidationAction = isActionTypeValid(messagePieces[mutationMessageStructure.ACTION_TYPE] || '');
+  const resultValidationMutationFile = isFileTypeValid(messagePieces[mutationMessageStructure.FILE_TYPE] || '');
+
+  if(resultValidationQueryFile.isValid) {
+    isValid = true;
+    typeOfMessage = "query";
+    typeOfFile = resultValidationQueryFile.type;
+  }
+  else if(
+    resultValidationAction.isValid && 
+    resultValidationMutationFile.isValid &&
+    messagePieces[mutationMessageStructure.URL]
+  ) {
+    isValid = true;
+    typeOfMessage = "mutation";
+    typeOfFile = resultValidationMutationFile.type;
+  }
+  return {isValid, typeOfMessage, typeOfFile };
+}
+
+
+function isFileTypeValid(message) {
+  var isValid = false;
+  var fileType = null;
+  for (const type of validQueryTypes) {
+     console.log({type, message})
+  
     if (message.includes(type)) {
-      valid = true;
-      type = type;
+      isValid = true;
+      fileType = type;
     }
   }
-  return { isValid: valid, type };
+  return { isValid, type: fileType };
+}
+
+function isActionTypeValid(message) {
+  var isValid = false;
+  var actionType = null;
+  for (const type of validMutationTypes) {
+    if (message.includes(type)) {
+      isValid = true;
+      actionType = type;
+    }
+  }
+  return { isValid, type: actionType };
 }
 
 async function sendMessage(channelID, message) {
@@ -101,7 +151,7 @@ function runHelp() {
 
   bot.postMessageToChannel(
     conversationId,
-    `Type @filesBot with either 'daily', 'ponts', 'retro' or 'planning' to get the file you need.`,
+    `Type @filesBot with either 'daily', 'ponts', 'retro' or 'planning' to get the url you need.`,
     params
   );
 }
