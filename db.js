@@ -69,6 +69,27 @@ const getFile = (channel, name) => {
     );
   });
 };
+const getAll = (channel) => {
+  return new Promise((resolve, reject) => {
+    db.all(
+      "SELECT name, url FROM files where channel=$channel",
+      {
+        $channel: channel
+      },
+      (error, rows) => {
+        if (error) {
+          reject(error);
+        } else {
+          if (rows.length > 0) {
+            resolve(rows.map(row => ({name: row.name, url: row.url})));
+          } else {
+            resolve();
+          }
+        }
+      }
+    );
+  });
+};
 // Test
 // (async () => {
 //     try {
@@ -81,4 +102,4 @@ const getFile = (channel, name) => {
 //     }
 // })();
 
-module.exports = { saveFile, getFile };
+module.exports = { saveFile, getFile, getAll };
