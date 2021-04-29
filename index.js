@@ -176,13 +176,8 @@ async function sendMessage(channelID, message) {
 
 // Show Help Text
 function runHelp() {
-  const params = {
-    icon_emoji: ":question:",
-  };
-
-  bot.postMessageToChannel(
+  sendMessage(
     conversationId,
-    `Type @filesBot with either 'daily', 'ponts', 'retro' or 'planning' to get the url you need.`,
-    params
+    `Type @FilesBot with either \`daily\`, \`retro\`, \`points\`, \`planning\` or \`all\` to get the url you need.`
   );
 }
