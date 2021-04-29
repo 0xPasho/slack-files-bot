@@ -16,8 +16,8 @@ const port = 3001;
 const app = express();
 
 // This argument can be a channel ID, a DM ID, a MPDM ID, or a group ID
-const conversationId = "#general";
-const validQueryTypes = ["daily", "retro", "points", "planning"];
+const conversationId = "#space-pod";
+const validQueryTypes = ["daily", "retro", "points", "planning", "all"];
 const validMutationTypes = ["set"];
 
 const queryMessageStructure = {
@@ -66,21 +66,45 @@ async function handleBotMention(message) {
   if (isValid) {
     console.log("TYPE OF MESSAGE", typeOfMessage);
     if (typeOfMessage === "query") {
-      try {
-        const file = await db.getFile(conversationId, typeOfFile);
-        if (file) {
-          sendMessage(conversationId, file);
-        } else {
+      if (typeOfFile === "all") {
+        try {
+          const files = await db.getAll(conversationId);
+          if (files) {
+            let message = files.reduce((message, file) => {
+              message += `\`${file.name}\`: ${file.url} \n`;
+              return message;
+            }, "");
+
+            sendMessage(conversationId, message);
+          } else {
+            sendMessage(
+              conversationId,
+              `Oops! No files have been set yet on this channel. Add some by running \`set $type $url\``
+            );
+          }
+        } catch {
           sendMessage(
             conversationId,
-            `Oops! No file has been set for ${typeOfFile} yet. Add one by running \`set ${typeOfFile} $url\``
+            `Oops! Something happened and the file couldn't be retrieved :( Try again!`
           );
         }
-      } catch {
-        sendMessage(
-          conversationId,
-          `Oops! Something happened and the file couldn't be retrieved :( Try again!`
-        );
+      } else {
+        try {
+          const file = await db.getFile(conversationId, typeOfFile);
+          if (file) {
+            sendMessage(conversationId, file);
+          } else {
+            sendMessage(
+              conversationId,
+              `Oops! No file has been set for ${typeOfFile} yet. Add one by running \`set ${typeOfFile} $url\``
+            );
+          }
+        } catch {
+          sendMessage(
+            conversationId,
+            `Oops! Something happened and the file couldn't be retrieved :( Try again!`
+          );
+        }
       }
     } else {
       try {
